@@ -1,70 +1,46 @@
+<!--#include virtual="/aspbackend/includes/db_conexao.asp" -->
+<!--#include virtual="/aspbackend/includes/utils.asp"-->
+
 <%
-<!--#include file="../includes/db_conexao.asp"-->
-<!--#include file="../includes/utils.asp"-->
-
-If Request.ServerVariables("REQUEST_METHOD") <> "GET" Then
-    Response.Status = "405 Método Não Permitido"
-    Response.AddHeader "Allow", "GET"
-    Response.ContentType = "application/json"
-    Response.Write "{""erro"":""Método não permitido""}"
-    Response.End
-End If
-
-
+Response.CodePage = 65001
+Response.Charset = "UTF-8"
 Response.ContentType = "application/json"
 
-Dim rs, json, first
-Set rs = Server.CreateObject("ADODB.Recordset")
-
-' Tratamento de erro na execução da procedure
-On Error Resume Next
-rs.Open "sp_listar_produtos", connect, 1, 3
-If Err.Number <> 0 Then
-    Response.Status = "500 Internal Server Error"
-    Response.Write "{""erro"":""" & JSONEscape(Err.Description) & """}"
-
-    ' Fechando objetos antes de encerrar
-    If Not rs Is Nothing Then rs.Close : Set rs = Nothing
-    If Not connect Is Nothing Then connect.Close : Set connect = Nothing
-
+If Request.ServerVariables("REQUEST_METHOD") <> "GET" Then
+    Response.Status = "405 Method Not Allowed"
+    Response.AddHeader "Allow", "GET"
+    Response.Write "{""erro"":""Protocolo HTTP não permitido para essa rota""}"
     Response.End
 End If
-On Error GoTo 0
 
-If rs.EOF Then
-    Response.Status = "200 OK"
-    Response.Write "{""mensagem"":""Não contém produtos cadastrados"",""produtos"":[]}"
-Else
-    Response.Status = "200 OK"
-    json = "["
-    first = True
+Dim cmd, rs, sql, json, first
+sql = "EXEC sp_listar_produtos"
 
-    Do Until rs.EOF
-        If Not first Then
-            json = json & ","
-        Else
-            first = False
-        End If
+Set cmd = Server.CreateObject("ADODB.Command")
+cmd.ActiveConnection = connect
+cmd.CommandText = sql
+cmd.CommandType = 1 
+Set rs = cmd.Execute
 
-        json = json & "{"
-        json = json & """produto_id"":" & rs("produto_id") & ","
-        json = json & """nome"":""" & JSONEscape(rs("nome")) & ""","
-        json = json & """descricao"":""" & JSONEscape(rs("descricao")) & ""","
-        json = json & """preco"":" & rs("preco") & ","
-        json = json & """quantidade"":" & rs("quantidade") & ","
-        json = json & """data_criacao"":""" & rs("data_criacao") & ""","
-        json = json & """data_atualizacao"":""" & rs("data_atualizacao") & """"
-        json = json & "}"
+json = "["
+first = True
+Do Until rs.EOF
+    If Not first Then json = json & ","
+    json = json & "{""produto_id"":" & rs("produto_id") & _
+           ",""nome"":""" & JSONEscape(rs("nome")) & _ 
+           """,""descricao"":""" & JSONEscape(rs("descricao")) & _ 
+           """,""preco"":" & rs("preco") & _
+           ",""quantidade"":" & rs("quantidade") & _
+           ",""data_criacao"":""" & rs("data_criacao") & _ 
+           """,""data_atualizacao"":""" & rs("data_atualizacao") & """}"
+    first = False
+    rs.MoveNext
+Loop
+json = json & "]"
 
-        rs.MoveNext
-    Loop
-
-    json = json & "]"
-    Response.Write "{""produtos"":" & json & "}"
-End If
+Response.Write json
 
 rs.Close
 Set rs = Nothing
-connect.Close
-Set connect = Nothing
+Set cmd = Nothing
 %>

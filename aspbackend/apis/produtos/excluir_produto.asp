@@ -10,6 +10,25 @@ If Request.ServerVariables("REQUEST_METHOD") <> "DELETE" Then
     Response.End
 End If
 
+Dim authHeader, token
+authHeader = Request.ServerVariables("HTTP_AUTHORIZATION")
+
+If authHeader = "" Or Left(authHeader, 7) <> "Bearer " Then
+    Response.Status = "401 Unauthorized"
+    Response.ContentType = "application/json"
+    Response.Write "{""erro"":""Token JWT ausente ou inválido""}"
+    Response.End
+End If
+
+token = Mid(authHeader, 8) 
+
+If Not ValidateJWT(token) Then
+    Response.Status = "401 Unauthorized"
+    Response.ContentType = "application/json"
+    Response.Write "{""erro"":""Token JWT inválido ou expirado""}"
+    Response.End
+End If
+
 Response.ContentType = "application/json"
 
 Dim produto_id

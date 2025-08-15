@@ -1,0 +1,112 @@
+<%
+
+Const JWT_SECRET = "f8D9s#kL2pX!vQ7mZrB6tW1yU3aH4jK" ' 
+
+
+Function GenerateJWT(payloadJson)
+    Dim headerJson, headerB64, payloadB64, signature, token
+    headerJson = "{""alg"":""HS256"",""typ"":""JWT""}"
+
+    headerB64 = Base64UrlEncode(StrToBytes(headerJson))
+    payloadB64 = Base64UrlEncode(StrToBytes(payloadJson))
+
+    signature = Base64UrlEncode(HMAC_SHA256Bytes(headerB64 & "." & payloadB64, JWT_SECRET))
+    token = headerB64 & "." & payloadB64 & "." & signature
+
+    GenerateJWT = token
+End Function
+
+
+Function ValidateJWT(token)
+    Dim parts, headerB64, payloadB64, signatureB64, dataToSign, signatureCalc, payloadJson
+
+    ValidateJWT = False
+    If token = "" Then Exit Function
+
+    parts = Split(token, ".")
+    If UBound(parts) <> 2 Then Exit Function 
+
+    headerB64 = parts(0)
+    payloadB64 = parts(1)
+    signatureB64 = parts(2)
+    dataToSign = headerB64 & "." & payloadB64
+
+    signatureCalc = Base64UrlEncode(HMAC_SHA256Bytes(dataToSign, JWT_SECRET))
+
+    If signatureCalc <> signatureB64 Then Exit Function
+
+    
+    payloadJson = BytesToStr(Base64UrlDecode(payloadB64))
+    If InStr(payloadJson, """exp"":") > 0 Then
+        Dim expPos, expVal
+        expPos = InStr(payloadJson, """exp"":") + 6
+        expVal = CLng(Mid(payloadJson, expPos, InStr(expPos, "}", payloadJson) - expPos))
+        If expVal < DateDiff("s", "1970-01-01", Now()) Then Exit Function
+    End If
+
+    ValidateJWT = True
+End Function
+
+
+Function HMAC_SHA256Bytes(msg, key)
+    Dim enc, hmac
+    Set enc = Server.CreateObject("System.Text.UTF8Encoding")
+    Set hmac = Server.CreateObject("System.Security.Cryptography.HMACSHA256")
+    hmac.Key = StrConv(key, vbFromUnicode)
+    HMAC_SHA256Bytes = hmac.ComputeHash_Bytes(StrConv(msg, vbFromUnicode))
+End Function
+
+
+Function Base64UrlEncode(bytes)
+    Dim s
+    s = EncodeBase64(bytes)
+    s = Replace(s, "+", "-")
+    s = Replace(s, "/", "_")
+    s = Replace(s, "=", "")
+    Base64UrlEncode = s
+End Function
+
+Function Base64UrlDecode(str)
+    Dim s
+    s = Replace(str, "-", "+")
+    s = Replace(s, "_", "/")
+    Select Case Len(s) Mod 4
+        Case 2: s = s & "=="
+        Case 3: s = s & "="
+    End Select
+    Base64UrlDecode = DecodeBase64(s)
+End Function
+
+
+Function StrToBytes(str)
+    Dim enc
+    Set enc = Server.CreateObject("System.Text.UTF8Encoding")
+    StrToBytes = enc.GetBytes_4(str)
+End Function
+
+Function BytesToStr(bytes)
+    Dim enc
+    Set enc = Server.CreateObject("System.Text.UTF8Encoding")
+    BytesToStr = enc.GetString_4(bytes)
+End Function
+
+
+Function EncodeBase64(bytes)
+    Dim xml, node
+    Set xml = CreateObject("MSXML2.DOMDocument.3.0")
+    Set node = xml.createElement("b64")
+    node.DataType = "bin.base64"
+    node.nodeTypedValue = bytes
+    EncodeBase64 = node.text
+End Function
+
+
+Function DecodeBase64(str)
+    Dim xml, node
+    Set xml = CreateObject("MSXML2.DOMDocument.3.0")
+    Set node = xml.createElement("b64")
+    node.DataType = "bin.base64"
+    node.text = str
+    DecodeBase64 = node.nodeTypedValue
+End Function
+%>

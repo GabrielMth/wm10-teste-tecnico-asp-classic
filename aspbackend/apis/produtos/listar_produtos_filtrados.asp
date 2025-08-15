@@ -2,6 +2,14 @@
 <!--#include file="../includes/db_conexao.asp"-->
 <!--#include file="../includes/utils.asp"-->
 
+If Request.ServerVariables("REQUEST_METHOD") <> "GET" Then
+    Response.Status = "405 Método Não Permitido"
+    Response.AddHeader "Allow", "GET"
+    Response.ContentType = "application/json"
+    Response.Write "{""erro"":""Método não permitido""}"
+    Response.End
+End If
+
 Response.ContentType = "application/json"
 
 Dim cmd, rs, json, first

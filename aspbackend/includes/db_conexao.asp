@@ -9,7 +9,7 @@ connect.ConnectionString = "Provider=SQLOLEDB;Data Source=localhost;Initial Cata
 On Error Resume Next
 connect.Open
 If Err.Number <> 0 Then
-    Response.Write "FALHOU a conexão com o bd!" & Err.Description
+    Response.Write "A conexão falhou!!!!" & Err.Description
     Response.End
 End If
 On Error GoTo 0

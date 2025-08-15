@@ -1,5 +1,15 @@
 <%
 <!--#include file="../includes/db_conexao.asp"-->
+<!--#include file="../includes/utils.asp"-->
+
+If Request.ServerVariables("REQUEST_METHOD") <> "POST" Then
+    Response.Status = "405 Method Not Allowed"
+    Response.AddHeader "Allow", "POST"
+    Response.ContentType = "application/json"
+    Response.Write "{""erro"":""Método não permitido""}"
+    Response.End
+End If
+
 
 Response.ContentType = "application/json"
 
@@ -52,8 +62,8 @@ On Error GoTo 0
 
 Response.Status = "201 Created"
 Response.Write "{""mensagem"":""Produto inserido com sucesso""," & _
-               """produto"":{""nome"":""" & nome & """," & _
-               """descricao"":""" & descricao & """," & _
+               """produto"":{""nome"":""" & JSONEscape(nome) & """," & _
+               """descricao"":""" & JSONEscape(descricao) & """," & _
                """preco"":" & preco & "," & _
                """quantidade"":" & quantidade & "}}"
 

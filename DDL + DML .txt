@@ -1,0 +1,424 @@
+Os Scripts abaixo podem ser executados em ordem. nomenclauturas em snake case
+
+Scripts - DDL
+───────────────────────
+[1º] →
+
+CREATE DATABASE wm10;
+GO
+
+[2º] →
+
+CREATE TABLE usuarios (
+    usuario_id INT IDENTITY(1,1) PRIMARY KEY,
+    nome_usuario NVARCHAR(50) NOT NULL UNIQUE,
+    email NVARCHAR(100) NOT NULL UNIQUE,
+    senha_hash NVARCHAR(255) NOT NULL,
+    perfil NVARCHAR(20) NOT NULL DEFAULT 'user',
+    data_criacao DATETIME NOT NULL DEFAULT GETDATE()
+);
+GO
+
+[3º] →
+
+CREATE TABLE produtos (
+	produto_id INT IDENTITY(1,1) PRIMARY KEY,
+	nome NVARCHAR(100) NOT NULL,
+	descricao NVARCHAR(255) NULL, 
+	preco DECIMAL(10,2) NOT NULL,
+	quantidade INT NOT NULL DEFAULT 0,
+	data_criacao DATETIME NOT NULL DEFAULT GETDATE(),
+	data_atualizacao DATETIME NULL
+);
+GO
+
+[4º] → 
+
+CREATE TABLE api_clientes (
+    client_id INT IDENTITY(1,1) PRIMARY KEY,
+    client_name NVARCHAR(100) NOT NULL,
+    api_token NVARCHAR(255) NOT NULL UNIQUE,
+    data_criacao DATETIME NOT NULL DEFAULT GETDATE()
+);
+GO
+
+[4º] → 
+Aqui o "realizado_por" por ser registrado tanto por um usuário do sistema tanto quanto por um user externo.
+
+CREATE TABLE logs (
+    log_id INT IDENTITY(1,1) PRIMARY KEY,
+    produto_id INT NOT NULL,
+    acao NVARCHAR(20) NOT NULL, 
+    realizado_por NVARCHAR(50) NULL,
+    dados_anteriores NVARCHAR(MAX) NULL,
+    dados_novos NVARCHAR(MAX) NULL,
+    data_acao DATETIME NOT NULL DEFAULT GETDATE(),
+    CONSTRAINT fk_logs_produtos FOREIGN KEY (produto_id)
+        REFERENCES produtos(produto_id)
+);
+GO
+
+[5º] → 
+CREATE TABLE sessao_tokens (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    token VARCHAR(50) NOT NULL UNIQUE,
+    expire_date DATETIME NOT NULL,
+    criado_em DATETIME DEFAULT GETDATE()
+);
+
+───────────────────────────────────────────────────────────────
+Scripts - DML ( SEEDs produtos e api_clients)
+
+[1º] →
+
+INSERT INTO produtos (nome, descricao, preco, quantidade)
+VALUES
+('Televisao', 'Premium 4K QD-Mini LED com Sistema Operacional , Google TV', 3100.90, 10),
+('Caneca Azul', 'Caneca de cerâmica 300ml', 25.50, 15),
+GO
+
+
+[2º] →
+
+INSERT INTO api_clients (client_name, api_token)
+VALUES
+('ClienteExternoTest', 'TOKEN1234567890');
+GO
+
+───────────────────────────────────────────────────────────────
+Scripts - DML ( PROCEDURES PRODUTOS )
+
+[1º] → List produtos
+
+CREATE PROCEDURE sp_listar_produtos
+AS
+BEGIN
+    SELECT produto_id, nome, descricao, preco, quantidade, data_criacao, data_atualizacao
+    FROM produtos
+    ORDER BY data_criacao DESC;
+END
+GO
+
+[2º] → Insert produtos
+
+CREATE PROCEDURE sp_inserir_produto
+    @nome NVARCHAR(100),
+    @descricao NVARCHAR(255) = NULL,
+    @preco DECIMAL(10,2),
+    @quantidade INT = 0
+AS
+BEGIN
+    INSERT INTO produtos (nome, descricao, preco, quantidade)
+    VALUES (@nome, @descricao, @preco, @quantidade);
+END
+GO
+
+[3º] → Update produtos
+
+CREATE PROCEDURE sp_atualizar_produto
+    @produto_id INT,
+    @nome NVARCHAR(100),
+    @descricao NVARCHAR(255) = NULL,
+    @preco DECIMAL(10,2),
+    @quantidade INT
+AS
+BEGIN
+    UPDATE produtos
+    SET nome = @nome,
+        descricao = @descricao,
+        preco = @preco,
+        quantidade = @quantidade,
+        data_atualizacao = GETDATE()
+    WHERE produto_id = @produto_id;
+END
+GO
+
+[4º] → Delete produtos
+
+CREATE PROCEDURE sp_deletar_produto
+    @produto_id INT
+AS
+BEGIN
+    DELETE FROM produtos
+    WHERE produto_id = @produto_id;
+END
+GO
+
+[4º] → FILTERS produtos
+
+CREATE PROCEDURE sp_listar_produtos_filtrados
+    @filtro_nome NVARCHAR(100) = NULL,
+    @preco_min DECIMAL(10,2) = NULL,
+    @preco_max DECIMAL(10,2) = NULL,
+    @quantidade_min INT = NULL,
+    @quantidade_max INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT produto_id, nome, descricao, preco, quantidade, data_criacao, data_atualizacao
+    FROM produtos
+    WHERE (@filtro_nome IS NULL OR nome LIKE '%' + @filtro_nome + '%')
+      AND (@preco_min IS NULL OR preco >= @preco_min)
+      AND (@preco_max IS NULL OR preco <= @preco_max)
+      AND (@quantidade_min IS NULL OR quantidade >= @quantidade_min)
+      AND (@quantidade_max IS NULL OR quantidade <= @quantidade_max)
+    ORDER BY data_criacao DESC;
+END
+GO
+
+
+
+───────────────────────────────────────────────────────────────
+Scripts - DML ( TRIGGER LOGS UPDATE/DELETE )
+
+
+[1º] → UPDATE
+
+CREATE TRIGGER trg_produtos_update
+ON produtos
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO logs (produto_id, acao, realizado_por, dados_anteriores, dados_novos)
+    SELECT
+        d.produto_id,
+        'UPDATE',
+        SYSTEM_USER,  
+        CONCAT(
+            '{ "nome": "', d.nome,
+            '", "descricao": "', d.descricao,
+            '", "preco": ', d.preco,
+            ', "quantidade": ', d.quantidade,
+            ', "data_criacao": "', d.data_criacao,
+            '" }'
+        ),
+        CONCAT(
+            '{ "nome": "', i.nome,
+            '", "descricao": "', i.descricao,
+            '", "preco": ', i.preco,
+            ', "quantidade": ', i.quantidade,
+            ', "data_criacao": "', i.data_criacao,
+            '" }'
+        )
+    FROM DELETED d
+    INNER JOIN INSERTED i ON d.produto_id = i.produto_id;
+END
+GO
+
+
+[2º] → DELETE
+
+CREATE TRIGGER trg_produtos_delete
+ON produtos
+AFTER DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO logs (produto_id, acao, realizado_por, dados_anteriores)
+    SELECT
+        d.produto_id,
+        'DELETE',
+        SYSTEM_USER,
+        CONCAT(
+            '{ "nome": "', d.nome,
+            '", "descricao": "', d.descricao,
+            '", "preco": ', d.preco,
+            ', "quantidade": ', d.quantidade,
+            ', "data_criacao": "', d.data_criacao,
+            '" }'
+        )
+    FROM DELETED d;
+END
+GO
+
+
+───────────────────────────────────────────────────────────────
+Scripts - DML ( CLIENTES EXTERNOS - FUNCTION VALIDAR TOKEN / PROCEDURE GERAR TOKEN  )
+
+[1º] →
+
+CREATE FUNCTION fn_validar_token(@token NVARCHAR(255))
+RETURNS BIT
+AS
+BEGIN
+    DECLARE @existe BIT;
+
+    IF EXISTS (SELECT 1 FROM api_clients WHERE api_token = @token)
+        SET @existe = 1;
+    ELSE
+        SET @existe = 0;
+
+    RETURN @existe;
+END
+GO
+
+
+[2º] →
+
+CREATE PROCEDURE sp_gerar_token
+    @novo_token NVARCHAR(255) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @novo_token = CONVERT(NVARCHAR(255), NEWID());
+END
+GO
+
+[3º] →
+
+CREATE PROCEDURE sp_cadastrar_cliente
+    @client_name NVARCHAR(100),
+    @novo_token NVARCHAR(255) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @novo_token = CONVERT(NVARCHAR(255), NEWID());
+
+    INSERT INTO api_clients (client_name, api_token)
+    VALUES (@client_name, @novo_token);
+END
+GO
+
+[4º] → SEED 
+
+DECLARE @token NVARCHAR(255);
+
+EXEC sp_cadastrar_cliente 'ClienteExternoTeste1', @token OUTPUT;
+SELECT @token AS token_gerado;
+
+───────────────────────────────────────────────────────────────
+Scripts - DML ( LOGIN / AUTENTICACAO )
+
+
+[1º] → Procedure para cadastrar usuário
+
+CREATE PROCEDURE sp_cadastrar_usuario
+    @nome_usuario NVARCHAR(50),
+    @email NVARCHAR(100),
+    @senha NVARCHAR(255),
+    @perfil NVARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @senha_hash NVARCHAR(255)
+    SET @senha_hash = CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', @senha), 2)
+
+    INSERT INTO usuarios (nome_usuario, email, senha_hash, perfil, data_criacao)
+    VALUES (@nome_usuario, @email, @senha_hash, @perfil, GETDATE())
+END
+GO
+
+
+
+
+[2º] → Procedure para validar login
+
+CREATE PROCEDURE sp_validar_login
+    @email NVARCHAR(100),
+    @senha NVARCHAR(255)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @senha_hash NVARCHAR(255)
+    SET @senha_hash = CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', @senha), 2)
+
+    SELECT usuario_id, nome_usuario, email, perfil
+    FROM usuarios
+    WHERE email = @email AND senha_hash = @senha_hash
+END
+GO
+
+[3º] →
+CREATE PROCEDURE sp_inserir_token
+    @usuario_id INT,
+    @token VARCHAR(255),
+    @expire_date DATETIME
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO sessao_tokens (usuario_id, token, expire_date)
+    VALUES (@usuario_id, @token, @expire_date);
+END
+
+[4º] →
+CREATE PROCEDURE sp_validar_token
+    @token VARCHAR(255),
+    @usuario_id INT OUTPUT,
+    @is_valid BIT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @expire_date DATETIME;
+
+    SELECT @usuario_id = usuario_id,
+           @expire_date = expire_date
+    FROM sessao_tokens
+    WHERE token = @token;
+
+    IF @expire_date IS NULL OR @expire_date < GETDATE()
+        SET @is_valid = 0;
+    ELSE
+        SET @is_valid = 1;
+END
+
+
+DESLOGAR USER E EXCLUIR TODOS TOKENS EXPIRADOS.
+CREATE PROCEDURE sp_logout_usuario
+    @token VARCHAR(255)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Deleta o token do usuário (logout atual)
+    DELETE FROM sessao_tokens
+    WHERE token = @token;
+
+    -- Remove tokens expirados
+    DELETE FROM sessao_tokens
+    WHERE expire_date < GETDATE();
+END;
+
+
+
+[5º] → Criar usuário administrador
+
+EXEC sp_cadastrar_usuario
+    @nome_usuario = 'admin',
+    @email = 'admin@wm10.com',
+    @senha = 'Admin123!',
+    @perfil = 'admin';
+
+[6º] → Criar usuário comum
+
+EXEC sp_cadastrar_usuario
+    @nome_usuario = 'usuario1',
+    @email = 'user@wm10.com',
+    @senha = 'User123!',
+    @perfil = 'user';
+
+
+------------------------------------------------------------
+JOB no SQL SERVER PARA DELETAR TOKENS DE SESSÃO EXPIRADOS.
+
+DELETE FROM sessao_tokens WHERE expire_date < GETDATE();
+
+
+
+HABILIAR IIS no Windows 10 
+
+Ativar ou desativar recursos do Windows
+Serviços de Informação da Internet > Recursos de Aplicativos 
+ASP ( PARA ASP CLÁSSICO)
+Serviços de Informação da Internet > Ferramentas de Gerenciamento
+Também é necessário instalar o Console de Gerenciamento ISS
